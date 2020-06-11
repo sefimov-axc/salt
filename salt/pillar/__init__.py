@@ -475,6 +475,48 @@ class PillarCache(object):
             return fresh_pillar
 
 
+class LazyAvailStates(object):
+    """
+    The LazyAvailStates lazily loads the list of states of available
+    environments.
+    This is particularly usefull when top_file_merging_strategy=same and there
+    are many environments.
+    """
+
+    def __init__(self, pillar):
+        self._pillar = pillar
+        self._avail = {"base": None}
+        self._filled = False
+
+    def _fill(self):
+        if self._filled:
+            return
+        for saltenv in self._pillar._get_envs():
+            if saltenv not in self._avail:
+                self._avail[saltenv] = None
+        self._filled = True
+
+    def __contains__(self, saltenv):
+        if saltenv == "base":
+            return True
+        self._fill()
+        return saltenv in self._avail
+
+    def __getitem__(self, saltenv):
+        if saltenv != "base":
+            self._fill()
+        if self._avail[saltenv] is None:
+            self._avail[saltenv] = self._pillar.client.list_states(saltenv)
+        return self._avail[saltenv]
+
+    def items(self):
+        self._fill()
+        ret = []
+        for saltenv, states in self._avail:
+            ret.append((saltenv, self.__getitem__(saltenv)))
+        return ret
+
+
 class Pillar(object):
     """
     Read over the pillar top files and render the pillar data
@@ -574,12 +616,9 @@ class Pillar(object):
 
     def __gather_avail(self):
         """
-        Gather the lists of available sls data from the master
+        Lazily gather the lists of available sls data from the master
         """
-        avail = {}
-        for saltenv in self._get_envs():
-            avail[saltenv] = self.client.list_states(saltenv)
-        return avail
+        return LazyAvailStates(self)
 
     def __gen_opts(self, opts_in, grains, saltenv=None, ext=None, pillarenv=None):
         """
