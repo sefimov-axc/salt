@@ -874,6 +874,7 @@ class Pillar:
                 return None, mods, errors
         state = None
         try:
+            defaults["file_client"] = self.client
             state = compile_template(
                 fn_,
                 self.rend,

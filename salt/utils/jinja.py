@@ -93,7 +93,9 @@ class SaltCacheLoader(BaseLoader):
         self.cached = []
         self._file_client = _file_client
         # Instantiate the fileclient
-        self.file_client()
+        if _file_client is None:
+            log.debug("SaltCacheLoader::__init__ - file_client is None. Instantiate")
+            self.file_client()
 
     def file_client(self):
         """
@@ -118,7 +120,14 @@ class SaltCacheLoader(BaseLoader):
         Cache a file from the salt master
         """
         saltpath = salt.utils.url.create(template)
-        self.file_client().get_file(saltpath, "", True, self.saltenv)
+        ret_path = self.file_client().get_file(saltpath, "", True, self.saltenv)
+        # remove 'template' string in returned full path and add cache directory into searchpath
+        m = ret_path.find(template, 0, len(ret_path))
+        if m >=0:
+           _rpath = ret_path[:m]
+           if not _rpath in self.searchpath:
+               self.searchpath.append(_rpath)
+           log.debug("SaltCacheLoader::cache_file Added directory %s into searchpath",_rpath)
 
     def check_cache(self, template):
         """
@@ -179,7 +188,6 @@ class SaltCacheLoader(BaseLoader):
                 "tpldot": tpldir.replace("/", "."),
             }
             environment.globals.update(tpldata)
-
         # pylint: disable=cell-var-from-loop
         for spath in self.searchpath:
             filepath = os.path.join(spath, _template)
